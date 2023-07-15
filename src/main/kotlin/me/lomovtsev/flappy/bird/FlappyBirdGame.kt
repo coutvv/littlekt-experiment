@@ -30,11 +30,10 @@ import kotlin.time.Duration
 
 class FlappyBirdGame(context: Context) : ContextListener(context) {
 
-    private var started = false
-    private var gameOver = false
+    private var state: FbGameState = FbGameState.INIT
+
     private var score = 0
     private var best = 0
-    private var pause = false
 
     override suspend fun Context.start() {
         val atlas = resourcesVfs["tiles.atlas.json"].readAtlas()
@@ -94,8 +93,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
         }
 
         fun reset() {
-            started = false
-            gameOver = false
+            state = FbGameState.INIT
             score = 0
 
             gameCamera.position.x = 0f
@@ -126,23 +124,24 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
         }
 
         val ui = sceneGraph(this, ExtendViewport(135, 256)) {
-            textureRect {
+            textureRect { // pause button
                 x = 10f
                 y = 10f
                 slice = pauseSlice
                 onUpdate += {
-                    visible = !gameOver && started && !pause
+                    visible = state == FbGameState.STARTED
                 }
                 onUiInput += uiInput@{
-                    if (!gameOver && started && !pause) {
+                    if (state == FbGameState.STARTED) {
                         if (it.type == InputEvent.Type.TOUCH_DOWN) {
-                            pause = true
+                            state = FbGameState.PAUSED
                             it.handle()
                         }
                     }
                 }
             }
 
+            // score
             panel {
                 name = "Score Container"
                 panel = NinePatchDrawable(NinePatch(panel9Slice, 2, 2, 2, 4))
@@ -153,7 +152,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 anchorRight = 0.9f
 
                 onUpdate += {
-                    visible = gameOver
+                    visible = state == FbGameState.GAME_OVER
                 }
 
                 vBoxContainer {
@@ -190,7 +189,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                         stretchMode = TextureRect.StretchMode.KEEP_CENTERED
 
                         onUiInput += {
-                            if (gameOver) {
+                            if (state == FbGameState.GAME_OVER) {
                                 if (it.type == InputEvent.Type.TOUCH_DOWN) {
                                     reset()
                                 }
@@ -204,7 +203,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 anchorRight = 1f
                 anchorBottom = 1f
                 onUpdate += {
-                    visible = pause
+                    visible = state == FbGameState.PAUSED
                 }
 
                 vBoxContainer {
@@ -220,9 +219,9 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                         slice = resumeSlice
                         stretchMode = TextureRect.StretchMode.KEEP_CENTERED
                         onUiInput += uiInput@{
-                            if (pause) {
+                            if (state == FbGameState.PAUSED) {
                                 if (it.type == InputEvent.Type.TOUCH_DOWN) {
-                                    pause = false
+                                    state = FbGameState.STARTED // TODO: check for other states!!!
                                     it.handle()
                                 }
                             }
@@ -237,13 +236,13 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 slice = pauseSlice
 
                 onUpdate += {
-                    visible = !gameOver && started && !pause
+                    visible = state == FbGameState.STARTED
                 }
 
                 onUiInput += {
                     println(it.type)
                     if (it.type == InputEvent.Type.TOUCH_DOWN) {
-                        pause = !pause
+                        state = FbGameState.STARTED // TODO: check!
                         it.handle()
                     }
                 }
@@ -257,7 +256,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 horizontalAlign = HAlign.CENTER
 
                 onUpdate += {
-                    visible = !gameOver && started
+                    visible = state == FbGameState.STARTED
                     text = "$score"
                 }
             }
@@ -268,7 +267,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 stretchMode = TextureRect.StretchMode.KEEP_CENTERED
                 slice = atlas.getByPrefix("gameOverText").slice
                 onUpdate += {
-                    visible = gameOver
+                    visible = state == FbGameState.GAME_OVER
                 }
             }
 
@@ -278,7 +277,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 stretchMode = TextureRect.StretchMode.KEEP_CENTERED
                 slice = atlas.getByPrefix("getReadyText").slice
                 onUpdate += {
-                    visible = !gameOver && !started
+                    visible = state == FbGameState.INIT
                 }
             }
         }.also { it.initialize() }
@@ -296,7 +295,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 pipes.forEach {
                     if (it.isColliding(bird.collider)) {
                         bird.speedMultiplier = 0f
-                        gameOver = true
+                        state = FbGameState.GAME_OVER
                         saveScore()
                         return@pipeCollisionCheck
                     } else if (it.intersectingScore(bird.collider)) {
@@ -313,7 +312,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 groundTiles.forEach {
                     if (it.isColliding(bird.collider)) {
                         bird.die()
-                        gameOver = true
+                        state = FbGameState.GAME_OVER
                         saveScore()
                         return@groundCollisionCheck
                     }
@@ -325,23 +324,27 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 bird.y = 0f
             }
 
-            if (!gameOver) {
+            if (state == FbGameState.STARTED) {
                 if (input.isJustTouched(Pointer.POINTER1) || input.isKeyJustPressed(Key.SPACE)) {
                     bird.flap()
                     KtScope.launch(audioCtx) {
                         flapSfx.play()
                     }
                 }
-            } else {
+            } else if (state == FbGameState.GAME_OVER) {
                 if (input.isKeyJustPressed(Key.SPACE)) {
                     reset()
+                }
+            } else if (state == FbGameState.INIT) {
+                if (input.isKeyJustPressed(Key.SPACE)) {
+                    state = FbGameState.STARTED
                 }
             }
         }
 
         fun handleStartMenu() {
             if (input.isJustTouched(Pointer.POINTER1) || input.isKeyJustPressed(Key.SPACE)) {
-                started = true
+                state = FbGameState.STARTED
             }
         }
 
@@ -355,7 +358,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
             gl.clearColor(Color.CLEAR)
             gl.clear(ClearBufferMask.COLOR_BUFFER_BIT)
 
-            if (started && !pause) {
+            if (state == FbGameState.STARTED) {
                 handleGameLogic(dt)
             } else {
                 handleStartMenu()
@@ -400,4 +403,18 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
             atlas.dispose()
         }
     }
+}
+
+/**
+ * INIT      -----> STARTED
+ *
+ * STARTED   -----> GAME_OVER
+ *           \----> PAUSED
+ *
+ * PAUSED    -----> STARTED
+ *
+ * GAME_OVER -----> INIT
+ */
+enum class FbGameState {
+    STARTED, PAUSED, GAME_OVER, INIT
 }
