@@ -4,10 +4,13 @@ import com.lehaine.littlekt.Context
 import com.lehaine.littlekt.ContextListener
 import com.lehaine.littlekt.async.KtScope
 import com.lehaine.littlekt.async.newSingleThreadAsyncContext
+import com.lehaine.littlekt.file.Vfs
 import com.lehaine.littlekt.file.vfs.readAtlas
 import com.lehaine.littlekt.file.vfs.readAudioClip
+import com.lehaine.littlekt.graphics.Camera
 import com.lehaine.littlekt.graphics.Color
 import com.lehaine.littlekt.graphics.g2d.SpriteBatch
+import com.lehaine.littlekt.graphics.g2d.TextureAtlas
 import com.lehaine.littlekt.graphics.g2d.getAnimation
 import com.lehaine.littlekt.graphics.g2d.use
 import com.lehaine.littlekt.graphics.gl.ClearBufferMask
@@ -30,32 +33,43 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
     private var score = AtomicInteger(0)
     private var best = AtomicInteger(0)
 
+    lateinit var bird: Bird
+    lateinit var gameCamera: Camera
+    lateinit var groundTiles: List<TexturedEnvironmentObject>
+    lateinit var backgrounds: List<TexturedEnvironmentObject>
+    lateinit var pipes: List<Pipe>
 
-    override suspend fun Context.start() {
-        val atlas = resourcesVfs["tiles.atlas.json"].readAtlas()
-
+    private fun generatePipes(atlas: TextureAtlas, gameViewport: ExtendViewport): List<Pipe> {
         val pipeHead = atlas.getByPrefix("pipeHead").slice
         val pipeBody = atlas.getByPrefix("pipeBody").slice
+        val groundHeight = atlas.getByPrefix("terrainTile0").slice.height
+        val totalPipesToSpawn = 10
+        val pipes = List(totalPipesToSpawn) {
+            Pipe(
+                pipeHead = pipeHead,
+                pipeBody = pipeBody,
+                offsetX = PIPE_OFFSET * totalPipesToSpawn,
+                availableHeight = gameViewport.virtualHeight.toInt(),
+                groundOffset = groundHeight
+            ).apply {
+                x = PIPE_OFFSET.toFloat() + PIPE_OFFSET * it
+            }
 
-        val audioCtx = newSingleThreadAsyncContext()
-        val flapSfx = resourcesVfs["sfx/flap.wav"].readAudioClip()
-        val scoreSfx = resourcesVfs["sfx/coinPickup0.wav"].readAudioClip()
-
-        val batch = SpriteBatch(this)
-        val gameViewport = ExtendViewport(135, 256)
-        val gameCamera = gameViewport.camera
-        val viewBounds = Rect()
-
-        val bird = Bird(atlas.getAnimation("bird"), 12f, 10f).apply {
-            y = 256 / 2f
         }
+        return pipes
+    }
 
+    private fun generateBackgrounds(atlas: TextureAtlas): List<TexturedEnvironmentObject> {
         val backgrounds = List(7) {
             val bg = atlas.getByPrefix("cityBackground").slice
             TexturedEnvironmentObject(bg, totalToWait = 2, hasCollsion = false).apply {
                 x = it * bg.width.toFloat() - (bg.width * 2)
             }
         }
+        return backgrounds
+    }
+
+    private fun generateGroundTiles(atlas: TextureAtlas): List<TexturedEnvironmentObject> {
         val groundTiles = List(35) {
             val tileIdx = Random.nextFloat().roundToInt()
             val tile = atlas.getByPrefix("terrainTile$tileIdx").slice
@@ -64,62 +78,69 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 y = 256f - tile.height
             }
         }
+        return groundTiles
+    }
 
-        val groundHeight = atlas.getByPrefix("terrainTile0").slice.height
-        val totalPipesToSpawn = 10
-        val pipeOffset = 100
-        val pipes = List(totalPipesToSpawn) {
-            Pipe(
-                pipeHead = pipeHead,
-                pipeBody = pipeBody,
-                offsetX = pipeOffset * totalPipesToSpawn,
-                availableHeight = gameViewport.virtualHeight.toInt(),
-                groundOffset = groundHeight
-            ).apply {
-                x = pipeOffset.toFloat() + pipeOffset * it
-            }
+    fun reset() {
+        state.set(FbGameState.INIT)
+        score.set(0)
 
-        }
+        gameCamera.position.x = 0f
+        bird.x = 0f
+        bird.y = 256 / 2f
+        bird.update(Duration.ZERO)
+        bird.reset()
 
-        fun reset() {
-            state.set(FbGameState.INIT)
-            score.set(0)
-
-            gameCamera.position.x = 0f
-            bird.x = 0f
-            bird.y = 256 / 2f
-            bird.update(Duration.ZERO)
-            bird.reset()
-
-            backgrounds.forEachIndexed { index, bg ->
-                bg.apply {
-                    x = index * texture.width.toFloat() - (texture.width * 2)
-                }
-            }
-
-            groundTiles.forEachIndexed { index, tile ->
-                tile.apply {
-                    x = index * texture.width.toFloat() - (texture.width * 2)
-                    y = 256f - texture.height
-                }
-            }
-
-            pipes.forEachIndexed { index, pipe ->
-                pipe.apply {
-                    x = pipeOffset.toFloat() + pipeOffset * index
-                    generate()
-                }
+        backgrounds.forEachIndexed { index, bg ->
+            bg.apply {
+                x = index * texture.width.toFloat() - (texture.width * 2)
             }
         }
 
-        val ui = Ui(context, state, score, best).makeUi(this, { reset() })
-
-        fun saveScore() {
-            best.set(vfs.loadString("best")?.toInt() ?: 0)
-            if (score.get() > best.get()) {
-                vfs.store("best", score.toString())
-                best = score
+        groundTiles.forEachIndexed { index, tile ->
+            tile.apply {
+                x = index * texture.width.toFloat() - (texture.width * 2)
+                y = 256f - texture.height
             }
+        }
+
+        pipes.forEachIndexed { index, pipe ->
+            pipe.apply {
+                x = PIPE_OFFSET.toFloat() + PIPE_OFFSET * index
+                generate()
+            }
+        }
+    }
+
+    fun saveScore(vfs: Vfs) {
+        best.set(vfs.loadString("best")?.toInt() ?: 0)
+        if (score.get() > best.get()) {
+            vfs.store("best", score.toString())
+            best = score
+        }
+    }
+
+    override suspend fun Context.start() {
+        val atlas: TextureAtlas = resourcesVfs["tiles.atlas.json"].readAtlas()
+
+        val audioCtx = newSingleThreadAsyncContext()
+        val flapSfx = resourcesVfs["sfx/flap.wav"].readAudioClip()
+        val scoreSfx = resourcesVfs["sfx/coinPickup0.wav"].readAudioClip()
+
+        val batch = SpriteBatch(this)
+        val gameViewport = ExtendViewport(135, 256)
+        gameCamera = gameViewport.camera
+        val viewBounds = Rect()
+        pipes = generatePipes(atlas, gameViewport)
+
+        bird = Bird(atlas.getAnimation("bird"), 12f, 10f).apply {
+            y = 256 / 2f
+        }
+        groundTiles = generateGroundTiles(atlas)
+        backgrounds = generateBackgrounds(atlas)
+
+        val ui = Ui(context, state, score, best).makeUi(this) {
+            reset()
         }
 
         fun handleGameLogic(dt: Duration) {
@@ -128,7 +149,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                     if (it.isColliding(bird.collider)) {
                         bird.speedMultiplier = 0f
                         state.set( FbGameState.GAME_OVER)
-                        saveScore()
+                        saveScore(vfs)
                         return@pipeCollisionCheck
                     } else if (it.intersectingScore(bird.collider)) {
                         KtScope.launch(audioCtx) {
@@ -145,7 +166,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                     if (it.isColliding(bird.collider)) {
                         bird.die()
                         state.set( FbGameState.GAME_OVER)
-                        saveScore()
+                        saveScore(vfs)
                         return@groundCollisionCheck
                     }
                 }
@@ -181,11 +202,12 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
         }
 
 
-        onResize { widht, height ->
+        onResize { width, height ->
             println("${graphics.width}, ${graphics.height}")
-            gameViewport.update(widht, height, context, true)
-            ui.resize(widht, height, true)
+            gameViewport.update(width, height, context, true)
+            ui.resize(width, height, true)
         }
+
         onRender { dt ->
             gl.clearColor(Color.CLEAR)
             gl.clear(ClearBufferMask.COLOR_BUFFER_BIT)
@@ -234,6 +256,10 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
         onDispose {
             atlas.dispose()
         }
+    }
+
+    companion object {
+        private const val PIPE_OFFSET = 100
     }
 }
 
