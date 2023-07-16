@@ -2,11 +2,8 @@ package me.lomovtsev.flappy.bird
 
 import com.lehaine.littlekt.Context
 import com.lehaine.littlekt.ContextListener
-import com.lehaine.littlekt.async.KtScope
-import com.lehaine.littlekt.async.newSingleThreadAsyncContext
 import com.lehaine.littlekt.file.Vfs
 import com.lehaine.littlekt.file.vfs.readAtlas
-import com.lehaine.littlekt.file.vfs.readAudioClip
 import com.lehaine.littlekt.graphics.Camera
 import com.lehaine.littlekt.graphics.Color
 import com.lehaine.littlekt.graphics.g2d.SpriteBatch
@@ -19,7 +16,6 @@ import com.lehaine.littlekt.input.Pointer
 import com.lehaine.littlekt.math.Rect
 import com.lehaine.littlekt.util.calculateViewBounds
 import com.lehaine.littlekt.util.viewport.ExtendViewport
-import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
@@ -123,9 +119,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
     override suspend fun Context.start() {
         val atlas: TextureAtlas = resourcesVfs["tiles.atlas.json"].readAtlas()
 
-        val audioCtx = newSingleThreadAsyncContext()
-        val flapSfx = resourcesVfs["sfx/flap.wav"].readAudioClip()
-        val scoreSfx = resourcesVfs["sfx/coinPickup0.wav"].readAudioClip()
+        val audioPart = AudioPart.create(resourcesVfs)
 
         val batch = SpriteBatch(this)
         val gameViewport = ExtendViewport(135, 256)
@@ -152,9 +146,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                         saveScore(vfs)
                         return@pipeCollisionCheck
                     } else if (it.intersectingScore(bird.collider)) {
-                        KtScope.launch(audioCtx) {
-                            scoreSfx.play(0.5f)
-                        }
+                        audioPart.coinPickupSound()
                         it.collect()
                         score.incrementAndGet()
                     }
@@ -179,10 +171,8 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
 
             if (state.get() == FbGameState.STARTED) {
                 if (input.isJustTouched(Pointer.POINTER1) || input.isKeyJustPressed(Key.SPACE)) {
+                    audioPart.flapSound()
                     bird.flap()
-                    KtScope.launch(audioCtx) {
-                        flapSfx.play()
-                    }
                 }
             } else if (state.get() == FbGameState.GAME_OVER) {
                 if (input.isKeyJustPressed(Key.SPACE)) {
