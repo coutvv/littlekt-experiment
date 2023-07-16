@@ -17,14 +17,13 @@ import com.lehaine.littlekt.math.Rect
 import com.lehaine.littlekt.util.calculateViewBounds
 import com.lehaine.littlekt.util.viewport.ExtendViewport
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 import kotlin.math.roundToInt
 import kotlin.random.Random
 import kotlin.time.Duration
 
 class FlappyBirdGame(context: Context) : ContextListener(context) {
 
-    private var state: AtomicReference<FbGameState> = AtomicReference(FbGameState.INIT)
+    private var state = GameState()
 
     private var score = AtomicInteger(0)
     private var best = AtomicInteger(0)
@@ -78,7 +77,8 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
     }
 
     fun reset() {
-        state.set(FbGameState.INIT)
+        state.init()
+
         score.set(0)
 
         gameCamera.position.x = 0f
@@ -142,7 +142,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 pipes.forEach {
                     if (it.isColliding(bird.collider)) {
                         bird.speedMultiplier = 0f
-                        state.set( FbGameState.GAME_OVER)
+                        state.gameOver()
                         saveScore(vfs)
                         return@pipeCollisionCheck
                     } else if (it.intersectingScore(bird.collider)) {
@@ -157,7 +157,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 groundTiles.forEach {
                     if (it.isColliding(bird.collider)) {
                         bird.die()
-                        state.set( FbGameState.GAME_OVER)
+                        state.gameOver()
                         saveScore(vfs)
                         return@groundCollisionCheck
                     }
@@ -169,25 +169,19 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
                 bird.y = 0f
             }
 
-            if (state.get() == FbGameState.STARTED) {
-                if (input.isJustTouched(Pointer.POINTER1) || input.isKeyJustPressed(Key.SPACE)) {
-                    audioPart.flapSound()
-                    bird.flap()
-                }
-            } else if (state.get() == FbGameState.GAME_OVER) {
-                if (input.isKeyJustPressed(Key.SPACE)) {
-                    reset()
-                }
-            } else if (state.get() == FbGameState.INIT) {
-                if (input.isKeyJustPressed(Key.SPACE)) {
-                    state.set(FbGameState.STARTED)
-                }
-            }
+            state.control(input, audioPart, bird)
         }
 
         fun handleStartMenu() {
             if (input.isJustTouched(Pointer.POINTER1) || input.isKeyJustPressed(Key.SPACE)) {
-                state.set(FbGameState.STARTED)
+                state.startGame()
+            }
+        }
+
+        fun handleGameOver() {
+            if (input.isJustTouched(Pointer.POINTER1) || input.isKeyJustPressed(Key.SPACE)) {
+                reset()
+                state.startGame()
             }
         }
 
@@ -204,7 +198,9 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
 
             if (state.get() == FbGameState.STARTED) {
                 handleGameLogic(dt)
-            } else {
+            } else if (state.get() == FbGameState.GAME_OVER) {
+                handleGameOver()
+            } else if (state.get() == FbGameState.INIT) {
                 handleStartMenu()
             }
 
@@ -266,3 +262,4 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
 enum class FbGameState {
     STARTED, PAUSED, GAME_OVER, INIT
 }
+

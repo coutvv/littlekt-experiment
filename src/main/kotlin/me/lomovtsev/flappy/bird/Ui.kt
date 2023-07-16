@@ -12,11 +12,10 @@ import com.lehaine.littlekt.graph.sceneGraph
 import com.lehaine.littlekt.graphics.g2d.NinePatch
 import com.lehaine.littlekt.util.viewport.ExtendViewport
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.concurrent.atomic.AtomicReference
 
 data class Ui (
     private val context: Context,
-    private val state: AtomicReference<FbGameState>,
+    private val state: GameState,
     val score: AtomicInteger,
     val best: AtomicInteger
 ){
@@ -39,12 +38,12 @@ data class Ui (
                 y = 10f
                 slice = pauseSlice
                 onUpdate += {
-                    visible = state.get() == FbGameState.STARTED
+                    visible = state.isStarted()
                 }
                 onUiInput += uiInput@{
-                    if (state.get() == FbGameState.STARTED) {
+                    if (state.isStarted()) {
                         if (it.type == InputEvent.Type.TOUCH_DOWN) {
-                            state.set(FbGameState.PAUSED)
+                            state.pauseToggle()
                             it.handle()
                         }
                     }
@@ -131,7 +130,7 @@ data class Ui (
                         onUiInput += uiInput@{
                             if (state.get() == FbGameState.PAUSED) {
                                 if (it.type == InputEvent.Type.TOUCH_DOWN) {
-                                    state.set(FbGameState.STARTED) // TODO: check for other states!!!
+                                    state.startGame() // TODO: check for other states!!!
                                     it.handle()
                                 }
                             }
@@ -152,7 +151,7 @@ data class Ui (
                 onUiInput += {
                     println(it.type)
                     if (it.type == InputEvent.Type.TOUCH_DOWN) {
-                        state.set(FbGameState.STARTED) // TODO: check!
+                        state.startGame()
                         it.handle()
                     }
                 }
