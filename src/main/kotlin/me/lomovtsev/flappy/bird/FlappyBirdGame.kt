@@ -112,7 +112,7 @@ class FlappyBirdGame(context: Context) : ContextListener(context) {
         best.set(vfs.loadString("best")?.toInt() ?: 0)
         if (score.get() > best.get()) {
             vfs.store("best", score.toString())
-            best = score
+            best.set(score.get())
         }
     }
 
