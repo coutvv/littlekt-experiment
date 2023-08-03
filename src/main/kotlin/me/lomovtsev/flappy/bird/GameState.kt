@@ -22,14 +22,12 @@ class GameState {
     }
 
     fun pauseToggle() {
-        if (currentState != FbGameState.STARTED || currentState != FbGameState.PAUSED) {
-            throw IllegalStateException("incorrect state $currentState for pause toggling")
+        currentState = when (currentState) {
+            FbGameState.STARTED -> FbGameState.PAUSED
+            FbGameState.PAUSED -> FbGameState.STARTED
+            else -> error("incorrect state $currentState for pause toggling")
         }
-        if (currentState == FbGameState.STARTED) {
-            currentState = FbGameState.PAUSED
-        } else {
-            currentState = FbGameState.STARTED
-        }
+
     }
 
     fun reset() {
@@ -56,6 +54,7 @@ class GameState {
     fun isStarted(): Boolean {
         return currentState == FbGameState.STARTED
     }
+
     fun get(): FbGameState {
         return currentState
     }
