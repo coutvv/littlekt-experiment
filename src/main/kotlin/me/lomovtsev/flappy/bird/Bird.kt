@@ -21,7 +21,7 @@ class Bird(
     val gravity = 0.018f
     var speedMultiplier =  1f
     var gravityMultiplier = 1f
-    val flapHeight = -0.7f
+    val flapHeight = -0.4f // in the mac os -0.7 is fine, in windows -0.5
 
     private val velocity = MutableVec2f(0f)
     private var sprite = flapAnimation.firstFrame
