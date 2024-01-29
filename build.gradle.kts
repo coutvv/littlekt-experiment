@@ -27,5 +27,8 @@ tasks.test {
 }
 
 application {
-    mainClass.set("MainKt")
+    mainClass.set("com.lomovtsev.flappy.bird.MainKt")
+    applicationDefaultJvmArgs = listOf(
+        "-XstartOnFirstThread"
+    )
 }
