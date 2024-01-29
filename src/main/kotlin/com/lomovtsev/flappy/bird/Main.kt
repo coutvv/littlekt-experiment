@@ -1,4 +1,4 @@
-package me.lomovtsev.flappy.bird
+package com.lomovtsev.flappy.bird
 
 import com.lehaine.littlekt.createLittleKtApp
 

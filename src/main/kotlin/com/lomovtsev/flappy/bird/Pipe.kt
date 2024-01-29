@@ -1,4 +1,4 @@
-package me.lomovtsev.flappy.bird
+package com.lomovtsev.flappy.bird
 
 import com.lehaine.littlekt.graphics.g2d.Batch
 import com.lehaine.littlekt.graphics.g2d.TextureSlice
@@ -83,7 +83,7 @@ class Pipe(
     fun generate() {
         val minPipeHeight = 5
         val availablePipeHeight = availableHeight - groundOffset - pipeHead.height * 2 - pipeSeparationHeight
-        pipeTopHeight = (minPipeHeight..availablePipeHeight).random().toFloat()
+        pipeTopHeight = (minPipeHeight..availablePipeHeight).random()
         pipeBottomHeight = availablePipeHeight - pipeTopHeight
         collected = false
     }
