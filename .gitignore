@@ -4,3 +4,4 @@ gradle
 build
 .httpCache
 .gradle
+.DS_Store
